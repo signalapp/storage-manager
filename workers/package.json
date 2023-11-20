@@ -1,0 +1,25 @@
+{
+  "name": "storage-manager",
+  "version": "0.1.0",
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20230419.0",
+    "@typescript-eslint/eslint-plugin": "^6.10.0",
+    "@typescript-eslint/parser": "^6.10.0",
+    "eslint": "^8.53.0",
+    "typescript": "^5.0.4",
+    "vitest": "^0.34.6",
+    "wrangler": "^3.0.0"
+  },
+  "dependencies": {
+    "itty-router": "^4.0.23"
+  },
+  "private": true,
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler publish",
+    "build": "wrangler deploy --dry-run --outdir=dist",
+    "pretest": "wrangler deploy --dry-run --outdir=dist",
+    "test": "vitest"
+  }
+}

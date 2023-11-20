@@ -1,0 +1,31 @@
+# Copyright 2024 Signal Messenger, LLC
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name = "storage-manager-dev"
+main = "src/index.ts"
+logpush = true
+compatibility_date = "2023-10-30"
+workers_dev = false
+
+# required since we use node crypto's streaming HMAC
+compatibility_flags = ["nodejs_compat"]
+
+# Specifies the r2 buckets. r2 bucket names are scoped to your account (not global). The buckets should be publicly inaccessible.
+r2_buckets = [
+	{ binding = "ATTACHMENT_BUCKET", bucket_name = "attachments-staging", preview_bucket_name = "attachments-staging" },
+	{ binding = "BACKUP_BUCKET", bucket_name = "backups-staging", preview_bucket_name = "backups-staging" }
+]
+
+[env.production]
+name = "storage-manager"
+r2_buckets = [
+	{ binding = "ATTACHMENT_BUCKET", bucket_name = "attachments", preview_bucket_name = "attachments" },
+	{ binding = "BACKUP_BUCKET", bucket_name = "backups", preview_bucket_name = "backups" }
+]
+
+[env.staging]
+name = "storage-manager-staging"
+r2_buckets = [
+	{ binding = "ATTACHMENT_BUCKET", bucket_name = "attachments-staging", preview_bucket_name = "attachments-staging" },
+	{ binding = "BACKUP_BUCKET", bucket_name = "backups-staging", preview_bucket_name = "backups-staging" }
+]
