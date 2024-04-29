@@ -7,6 +7,7 @@ import { Encrypter, streamEncrypt } from './encrypt';
 export interface Env {
 	ATTACHMENT_BUCKET: R2Bucket;
 	BACKUP_BUCKET: R2Bucket;
+	GCS_BUCKET: string;
 }
 
 const router = Router();
@@ -114,18 +115,48 @@ interface CopyRequest {
 	encryptionKey: string,
 	hmacKey: string,
 	iv: string,
-	source: string,
+	source: SourceDescriptor,
 	expectedSourceLength: number,
 	dst: string
 }
 
+interface GCSSourceDescriptor {
+	scheme: 'gcs',
+	key: string,
+}
+
+interface R2SourceDescriptor {
+	scheme: 'r2',
+	key: string,
+}
+
+type SourceDescriptor = GCSSourceDescriptor | R2SourceDescriptor;
+
+
 function isCopyRequest(o: unknown): o is CopyRequest {
+
+	function isGCSSource(o: object): o is GCSSourceDescriptor {
+		return 'scheme' in o && typeof (o.scheme) === 'string' && o.scheme === 'gcs'
+			&& 'key' in o && typeof (o.key) === 'string';
+	}
+
+	function isR2Source(o: object): o is R2SourceDescriptor {
+		return 'scheme' in o && typeof (o.scheme) === 'string' && o.scheme === 'r2'
+			&& 'key' in o && typeof (o.key) === 'string';
+	}
+
+	function isSourceDescriptor(o: unknown): o is SourceDescriptor {
+		return o != null
+			&& typeof o === 'object'
+			&& (isGCSSource(o) || isR2Source(o));
+	}
+
 	return o != null
 		&& typeof o === 'object'
 		&& 'encryptionKey' in o && typeof (o.encryptionKey) === 'string'
 		&& 'hmacKey' in o && typeof (o.hmacKey) === 'string'
 		&& 'iv' in o && typeof (o.iv) === 'string'
-		&& 'source' in o && typeof (o.source) === 'string'
+		&& 'source' in o && isSourceDescriptor(o.source)
 		&& 'expectedSourceLength' in o && typeof (o.expectedSourceLength) === 'number'
 		&& 'dst' in o && typeof (o.dst) === 'string';
 }
@@ -160,25 +191,61 @@ async function copyHandler(request: IRequest, env: Env): Promise<Response> {
 		return error(400, 'invalid iv, must be length 16');
 	}
 
-	const r2Source = await env.ATTACHMENT_BUCKET.get(copyRequest.source);
-	if (r2Source === null) {
+	const s = await source(env, copyRequest.source);
+	if (s == null) {
 		return error(404, 'source object not found');
 	}
-
-	if (r2Source.size !== copyRequest.expectedSourceLength) {
-		return error(409, `request expectedSourceLength ${copyRequest.expectedSourceLength} did not match actual sourceLength ${r2Source.size}`);
+	if (s.length !== copyRequest.expectedSourceLength) {
+		return error(409, `request expectedSourceLength ${copyRequest.expectedSourceLength} did not match actual sourceLength ${s.length}`);
 	}
 
 	const encrypter = await Encrypter.create(iv, hmacKey, aesKeyBuf);
-	const { readable, writable } = new FixedLengthStream(encrypter.encryptedLength(r2Source.size));
+	const { readable, writable } = new FixedLengthStream(encrypter.encryptedLength(s.length));
 	const putRequest = env.BACKUP_BUCKET.put(copyRequest.dst, readable, {
-		httpMetadata: r2Source.httpMetadata
+		httpMetadata: s.httpMetadata
 	});
-	await streamEncrypt(encrypter, r2Source.body, writable);
+	await streamEncrypt(encrypter, s.body, writable);
 	await putRequest;
 	return new Response(null, { status: 204 });
 }
 
+interface SourceStream {
+	body: ReadableStream<Uint8Array>,
+	httpMetadata?: R2HTTPMetadata,
+	length: number
+}
+
+async function source(env: Env, sourceDescriptor: SourceDescriptor): Promise<SourceStream | null> {
+	switch (sourceDescriptor.scheme) {
+		case 'r2': {
+			const r2Source = await env.ATTACHMENT_BUCKET.get(sourceDescriptor.key);
+			if (r2Source == null) {
+				return null;
+			}
+			return { body: r2Source.body, length: r2Source.size, httpMetadata: r2Source.httpMetadata };
+		}
+		case 'gcs': {
+			const uri = `https://storage.googleapis.com/${env.GCS_BUCKET}/attachments/${sourceDescriptor.key}`;
+			const fetchSource = await fetch(uri);
+			if (fetchSource.status === 404) {
+				return null;
+			}
+			if (!fetchSource.ok) {
+				throw new StatusError(500, `Unexpected error reading source object ${fetchSource.status}`);
+			}
+			const sourceLength = readInt(fetchSource.headers.get('Content-Length'));
+			if (isNaN(sourceLength)) {
+				throw new StatusError(500, 'source did not provide content-length header');
+			}
+			if (fetchSource.body == null) {
+				throw new StatusError(500, 'source did not have body');
+			}
+			return { length: sourceLength, body: fetchSource.body as ReadableStream<Uint8Array> };
+		}
+		default:
+			return assertNever(sourceDescriptor);
+	}
+}
 
 function getBucket(env: Env, bucketId: string): R2Bucket | undefined {
 	switch (bucketId) {
@@ -189,6 +256,17 @@ function getBucket(env: Env, bucketId: string): R2Bucket | undefined {
 		default:
 			return undefined;
 	}
+}
+
+function readInt(s: string | null): number {
+	if (s == null) {
+		return NaN;
+	}
+	return parseInt(s, 10);
+}
+
+function assertNever(x: never): never {
+	throw new Error('Unexpected object: ' + x);
 }
 
 function b64decode(b64: string): Uint8Array | null {

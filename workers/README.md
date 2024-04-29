@@ -30,8 +30,19 @@ npm test
 # Deploying
 
 ## One time setup
-Create R2 buckets and update the bindings in `wrangler.toml`, then:
+Create R2 buckets and update the bindings in `wrangler.toml`.
 
+Set the GCS bucket to use, either by setting a variable in `wrangler.toml`
+```
+[vars]
+GCS_BUCKET = <your GCS bucket>
+```
+or using a wrangler secret
+```
+wrangler secret put GCS_BUCKET [-e <staging | production>]
+```
+
+then:
 ```
 wrangler deploy -e <staging|production>
 ```

@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import { randBytes, randomishBytes, authenticateAndDecrypt } from './testutil';
 import { ListResponse } from './index';
+import { fetchMock } from 'cloudflare:test';
 import './env.d.ts';
 
+const GCS_BUCKET: string = env.GCS_BUCKET;
 
 function bucket(bucketName: string): R2Bucket {
 	if (bucketName === 'attachments') {
@@ -157,17 +159,17 @@ describe('usage', async () => {
 });
 
 describe('copy', () => {
-	const key = randBytes(32);
+	const encryptionKey = randBytes(32);
 	const hmacKey = randBytes(32);
 	const iv = randBytes(16);
 	const plaintext = randBytes(1024 * 3 + 7);
 
-	function validRequest(source: Uint8Array = plaintext) {
+	function validRequest(source: Uint8Array = plaintext, key = 'abc', scheme = 'r2') {
 		return {
-			encryptionKey: Buffer.from(key).toString('base64'),
+			encryptionKey: Buffer.from(encryptionKey).toString('base64'),
 			hmacKey: Buffer.from(hmacKey).toString('base64'),
 			iv: Buffer.from(iv).toString('base64'),
-			source: 'abc',
+			source: { scheme, key },
 			expectedSourceLength: source.length,
 			dst: 'my/abc'
 		};
@@ -197,9 +199,16 @@ describe('copy', () => {
 		expect(res.status, await res.text()).toBe(400);
 	});
 
-	it('handles missing source object', async () => {
-		const request: Record<string, unknown> = validRequest();
-		request['source'] = 'DoesNotExist';
+	it.each(['r2', 'gcs'])('handles missing %s source object', async (scheme: string) => {
+		if (scheme === 'gcs') {
+			fetchMock.activate();
+			fetchMock.disableNetConnect();
+
+			fetchMock.get('https://storage.googleapis.com')
+				.intercept({ path: `/${GCS_BUCKET}/attachments/DoesNotExist` })
+				.reply(404);
+		}
+		const request: Record<string, unknown> = validRequest(plaintext, 'DoesNotExist', scheme);
 		const body = JSON.stringify(request);
 		const res = await SELF.fetch('http://localhost/copy', {
 			method: 'PUT',
@@ -209,7 +218,7 @@ describe('copy', () => {
 		expect(res.status, await res.text()).toBe(404);
 	});
 
-	it('rejects bad sourceLength', async () => {
+	it('rejects bad r2 sourceLength', async () => {
 		await env.ATTACHMENT_BUCKET.put('abc', plaintext);
 		const request: Record<string, unknown> = validRequest();
 		request['expectedSourceLength'] = plaintext.length - 1;
@@ -222,6 +231,29 @@ describe('copy', () => {
 		expect(res.status, await res.text()).toBe(409);
 	});
 
+	it('rejects bad gcs sourceLength', async () => {
+		fetchMock.activate();
+		fetchMock.disableNetConnect();
+
+		fetchMock.get('https://storage.googleapis.com')
+			.intercept({ path: `/${GCS_BUCKET}/attachments/wrongSourceLength` })
+			.reply(200, plaintext, {
+				headers: { 'Content-Length': (plaintext.length - 1).toString() }
+			});
+
+		fetchMock.get('https://storage.googleapis.com')
+			.intercept({ path: `/${GCS_BUCKET}/attachments/missingSourceLength` })
+			.reply(200, plaintext, {});
+
+		let request: Record<string, unknown> = validRequest(plaintext, 'missingSourceLength', 'gcs');
+		const missingRes = await SELF.fetch('http://localhost/copy', { method: 'PUT', body: JSON.stringify(request) });
+		expect(missingRes.status, await missingRes.text()).toBe(500);
+
+		request = validRequest(plaintext, 'wrongSourceLength', 'gcs');
+		const wrongRes = await SELF.fetch('http://localhost/copy', { method: 'PUT', body: JSON.stringify(request) });
+		expect(wrongRes.status, await wrongRes.text()).toBe(409);
+	});
+
 	it.each([
 		0, 63, 64, 1024 * 4 - 1, 1024, 1024 * 4 + 1, 1024 * 1024, 1024 * 1024 * 3 + 1
 	])('copies %s bytes to backup bucket', async (plaintextLength: number) => {
@@ -230,12 +262,29 @@ describe('copy', () => {
 		const body = JSON.stringify(validRequest(plaintext));
 		const res = await SELF.fetch('http://localhost/copy', {
 			method: 'PUT',
-			body: body,
-			headers: { 'Content-Length': body.length.toString() }
+			body: body
 		});
 		expect(res.status, await res.text()).toBe(204);
 		const payload = await toArray(await env.BACKUP_BUCKET.get('my/abc'));
-		const decrypted = await authenticateAndDecrypt(iv, key, hmacKey, payload!);
+		const decrypted = await authenticateAndDecrypt(iv, encryptionKey, hmacKey, payload!);
 		expect(decrypted).toEqual(plaintext);
 	});
+
+	it.each([0, 63, 64, 1024 * 4 - 1, 1024, 1024 * 4 + 1])('copies %s bytes from GCS', async (plaintextLength: number) => {
+		fetchMock.activate();
+		fetchMock.disableNetConnect();
+
+		const plaintext = Buffer.from(await randomishBytes(plaintextLength));
+		fetchMock.get('https://storage.googleapis.com')
+			.intercept({ path: `/${GCS_BUCKET}/attachments/myKey` })
+			.reply(200, plaintext, {
+				headers: { 'Content-Length': plaintext.length.toString() }
+			});
+		const request = validRequest(plaintext, 'myKey', 'gcs');
+		const body = JSON.stringify(request);
+		const res = await SELF.fetch('http://localhost/copy', { method: 'PUT', body });
+		expect(res.status, await res.text()).toBe(204);
+		fetchMock.assertNoPendingInterceptors();
+	});
+
 });

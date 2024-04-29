@@ -8,6 +8,7 @@ export default defineWorkersConfig({
 		poolOptions: {
 			workers: {
 				main: './src/index.ts',
+				miniflare: { bindings: { GCS_BUCKET: 'myBucket' } },
 				wrangler: { configPath: './wrangler.toml' }
 			}
 		}
