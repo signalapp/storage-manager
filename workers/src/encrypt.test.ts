@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, it } from 'vitest';
-import { randBytes, readableStreamFrom, readAll, webcryptoAuthenticateAndDecrypt } from './testutil';
+import { randBytes, readableStreamFrom, readAll, authenticateAndDecrypt } from './testutil';
 import { Encrypter, streamEncrypt } from './encrypt';
 
 describe('streamEncrypt', () => {
@@ -26,7 +26,7 @@ describe('streamEncrypt', () => {
 
 		await writePromise;
 		const encrypted = await readPromise;
-		const decrypted = await webcryptoAuthenticateAndDecrypt(iv, keyBytes, hmacKey, encrypted);
+		const decrypted = await authenticateAndDecrypt(iv, keyBytes, hmacKey, encrypted);
 
 		expect(encrypted.length).toBe(encrypter.encryptedLength(plaintext.length));
 		expect(decrypted).toEqual(plaintext);
@@ -43,7 +43,7 @@ describe('streamEncrypt', () => {
 		const { readable: actual, writable: dst } = new TransformStream();
 		const encrypt = streamEncrypt(encrypter, source, dst, 1024);
 		const ciphertext = await readAll(actual);
-		const decrypted = await webcryptoAuthenticateAndDecrypt(iv, keyBytes, hmacKey, ciphertext);
+		const decrypted = await authenticateAndDecrypt(iv, keyBytes, hmacKey, ciphertext);
 		await encrypt;
 		expect(decrypted).toEqual(plaintext);
 		expect(ciphertext.length).toBe(encrypter.encryptedLength(plaintextLength));
