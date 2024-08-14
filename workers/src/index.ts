@@ -225,7 +225,8 @@ async function source(env: Env, sourceDescriptor: SourceDescriptor): Promise<Sou
 			return { body: r2Source.body, length: r2Source.size, httpMetadata: r2Source.httpMetadata };
 		}
 		case 'gcs': {
-			const uri = `https://storage.googleapis.com/${env.GCS_BUCKET}/attachments/${sourceDescriptor.key}`;
+			const encodedSourceKey = encodeURIComponent(sourceDescriptor.key);
+			const uri = `https://storage.googleapis.com/${env.GCS_BUCKET}/attachments/${encodedSourceKey}`;
 			const fetchSource = await fetch(uri);
 			if (fetchSource.status === 404) {
 				return null;

@@ -218,6 +218,26 @@ describe('copy', () => {
 		expect(res.status, await res.text()).toBe(404);
 	});
 
+	it('handles weird sourceKeys', async () => {
+		const sourceKey = '../+_../--';
+		const encoded = '..%2F%2B_..%2F--';
+		fetchMock.activate();
+		fetchMock.disableNetConnect();
+
+		const plaintext = Buffer.from(await randomishBytes(32));
+		fetchMock.get('https://storage.googleapis.com')
+			.intercept({ path: `/${GCS_BUCKET}/attachments/${encoded}` })
+			.reply(200, plaintext, {
+				headers: { 'Content-Length': plaintext.length.toString() }
+			});
+
+		const request = validRequest(plaintext, sourceKey, 'gcs');
+		const body = JSON.stringify(request);
+		const res = await SELF.fetch('http://localhost/copy', { method: 'PUT', body });
+		expect(res.status, await res.text()).toBe(204);
+		fetchMock.assertNoPendingInterceptors();
+	});
+
 	it('rejects bad r2 sourceLength', async () => {
 		await env.ATTACHMENT_BUCKET.put('abc', plaintext);
 		const request: Record<string, unknown> = validRequest();
