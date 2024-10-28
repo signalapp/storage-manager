@@ -75,7 +75,12 @@ export async function decrypt(iv: Uint8Array, key: Uint8Array, data: Uint8Array)
 	return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, await aesKey(key), data));
 }
 
-export async function authenticateAndDecrypt(iv: Uint8Array, key: Uint8Array, hmacKey: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
+export async function authenticateAndDecrypt(key: Uint8Array, hmacKey: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
+	// Use the IV appended to the ciphertext
+	return await authenticateAndDecryptWithIv(ciphertext.subarray(0, 16), key, hmacKey, ciphertext)
+}
+
+export async function authenticateAndDecryptWithIv(iv: Uint8Array, key: Uint8Array, hmacKey: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
 	expect(ciphertext.subarray(0, 16)).toEqual(iv);
 	const encrypted = ciphertext!.subarray(16, ciphertext.length - 32);
 	const hmac = ciphertext.subarray(ciphertext.length - 32, ciphertext.length);

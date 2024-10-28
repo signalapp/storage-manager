@@ -161,14 +161,12 @@ describe('usage', async () => {
 describe('copy', () => {
 	const encryptionKey = randBytes(32);
 	const hmacKey = randBytes(32);
-	const iv = randBytes(16);
 	const plaintext = randBytes(1024 * 3 + 7);
 
 	function validRequest(source: Uint8Array = plaintext, key = 'abc', scheme = 'r2') {
 		return {
 			encryptionKey: Buffer.from(encryptionKey).toString('base64'),
 			hmacKey: Buffer.from(hmacKey).toString('base64'),
-			iv: Buffer.from(iv).toString('base64'),
 			source: { scheme, key },
 			expectedSourceLength: source.length,
 			dst: 'my/abc'
@@ -187,7 +185,7 @@ describe('copy', () => {
 		expect(res.status, await res.text()).toBe(400);
 	});
 
-	it.each(['encryptionKey', 'hmacKey', 'iv', 'expectedSourceLength'])('rejects bad base64 encoded %s', async (badprop: string) => {
+	it.each(['encryptionKey', 'hmacKey', 'expectedSourceLength'])('rejects bad base64 encoded %s', async (badprop: string) => {
 		const request: Record<string, unknown> = validRequest();
 		request[badprop] = 'aa&bb';
 		const body = JSON.stringify(request);
@@ -286,7 +284,7 @@ describe('copy', () => {
 		});
 		expect(res.status, await res.text()).toBe(204);
 		const payload = await toArray(await env.BACKUP_BUCKET.get('my/abc'));
-		const decrypted = await authenticateAndDecrypt(iv, encryptionKey, hmacKey, payload!);
+		const decrypted = await authenticateAndDecrypt(encryptionKey, hmacKey, payload!);
 		expect(decrypted).toEqual(plaintext);
 	});
 

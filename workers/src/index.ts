@@ -114,7 +114,6 @@ async function usageHandler(request: IRequest, env: Env): Promise<Response> {
 interface CopyRequest {
 	encryptionKey: string,
 	hmacKey: string,
-	iv: string,
 	source: SourceDescriptor,
 	expectedSourceLength: number,
 	dst: string
@@ -155,7 +154,6 @@ function isCopyRequest(o: unknown): o is CopyRequest {
 		&& typeof o === 'object'
 		&& 'encryptionKey' in o && typeof (o.encryptionKey) === 'string'
 		&& 'hmacKey' in o && typeof (o.hmacKey) === 'string'
-		&& 'iv' in o && typeof (o.iv) === 'string'
 		&& 'source' in o && isSourceDescriptor(o.source)
 		&& 'expectedSourceLength' in o && typeof (o.expectedSourceLength) === 'number'
 		&& 'dst' in o && typeof (o.dst) === 'string';
@@ -183,13 +181,8 @@ async function copyHandler(request: IRequest, env: Env): Promise<Response> {
 		return error(400, 'invalid hmac key, must be length 32');
 	}
 
-	const iv = b64decode(copyRequest.iv);
-	if (iv == null) {
-		return error(400, 'invalid iv, must be base64');
-	}
-	if (iv.length != 16) {
-		return error(400, 'invalid iv, must be length 16');
-	}
+	const iv = new Uint8Array(16);
+	crypto.getRandomValues(iv);
 
 	const s = await source(env, copyRequest.source);
 	if (s == null) {
