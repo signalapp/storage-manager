@@ -77,7 +77,7 @@ export async function decrypt(iv: Uint8Array, key: Uint8Array, data: Uint8Array)
 
 export async function authenticateAndDecrypt(key: Uint8Array, hmacKey: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
 	// Use the IV appended to the ciphertext
-	return await authenticateAndDecryptWithIv(ciphertext.subarray(0, 16), key, hmacKey, ciphertext)
+	return await authenticateAndDecryptWithIv(ciphertext.subarray(0, 16), key, hmacKey, ciphertext);
 }
 
 export async function authenticateAndDecryptWithIv(iv: Uint8Array, key: Uint8Array, hmacKey: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
@@ -87,3 +87,16 @@ export async function authenticateAndDecryptWithIv(iv: Uint8Array, key: Uint8Arr
 	expect(await hmacVerify(hmac, hmacKey, ciphertext.subarray(0, ciphertext.length - 32))).toBe(true);
 	return await decrypt(iv, key, encrypted);
 }
+
+export function arrayEquals(a1: Uint8Array, a2: Uint8Array): boolean {
+	if (a1.length !== a2.length) {
+		return false;
+	}
+	for (let i = 0; i < a1.length; ++i) {
+		if (a1[i] !== a2[i]) {
+			return false;
+		}
+	}
+	return true;
+}
+

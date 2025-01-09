@@ -21,7 +21,7 @@ router
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return await router.handle(request, env, ctx).catch(e => {
+		return await router.fetch(request, env, ctx).catch(e => {
 			console.log('error: ' + e.stack);
 			return error(e);
 		}).then(json);
@@ -266,7 +266,7 @@ function assertNever(x: never): never {
 function b64decode(b64: string): Uint8Array | null {
 	try {
 		return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-	} catch (e) {
+	} catch (_e) {
 		return null;
 	}
 }

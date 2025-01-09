@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
-import { randBytes, randomishBytes, authenticateAndDecrypt } from './testutil';
+import { randBytes, randomishBytes, authenticateAndDecrypt, arrayEquals } from './testutil';
 import { ListResponse } from './index';
 import { fetchMock } from 'cloudflare:test';
 import './env.d.ts';
@@ -285,7 +285,7 @@ describe('copy', () => {
 		expect(res.status, await res.text()).toBe(204);
 		const payload = await toArray(await env.BACKUP_BUCKET.get('my/abc'));
 		const decrypted = await authenticateAndDecrypt(encryptionKey, hmacKey, payload!);
-		expect(decrypted).toEqual(plaintext);
+		expect(arrayEquals(decrypted, plaintext)).toBe(true);
 	});
 
 	it.each([0, 63, 64, 1024 * 4 - 1, 1024, 1024 * 4 + 1])('copies %s bytes from GCS', async (plaintextLength: number) => {
