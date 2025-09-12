@@ -4,6 +4,7 @@
 import { error, IRequest, json, Router, StatusError } from 'itty-router';
 import { Encrypter, streamEncrypt } from './encrypt';
 
+const MAX_REQUEST_PAGE_SIZE: number = 10000;
 export const R2_MAX_PAGE_SIZE: number = 1000;
 
 export interface Env {
@@ -66,7 +67,7 @@ async function listHandler(request: IRequest, env: Env): Promise<Response> {
 		return error(400, 'only one prefix parameter can be provided');
 	}
 	const requestedLimit = request.query['limit'] == null ? undefined : parseInt(request.query['limit']);
-	if (requestedLimit != null && (isNaN(requestedLimit) || requestedLimit > 10000)) {
+	if (requestedLimit != null && (isNaN(requestedLimit) || requestedLimit > MAX_REQUEST_PAGE_SIZE)) {
 		throw new StatusError(400, `invalid limit ${requestedLimit}`);
 	}
 
