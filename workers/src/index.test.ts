@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import { randBytes, randomishBytes, authenticateAndDecrypt, arrayEquals } from './testutil';
-import { ListResponse } from './index';
+import { ListResponse, R2_MAX_PAGE_SIZE } from './index';
 import { fetchMock } from 'cloudflare:test';
 import './env.d.ts';
 
@@ -60,9 +60,8 @@ describe('list', () => {
 
 	async function addObjects(prefix: string, numObjects: number, content: string): Promise<string[]> {
 		const keys = [...Array(numObjects).keys()].map(i => `${prefix}/${i}`);
-		for (const key of keys) {
-			await env.BACKUP_BUCKET.put(key, content);
-		}
+		const futures = keys.map(key => env.BACKUP_BUCKET.put(key, content));
+		await Promise.all(futures);
 		return keys;
 	}
 
@@ -116,6 +115,29 @@ describe('list', () => {
 		const res = await response.json() as ListResponse;
 		expect(res.cursor).toBeUndefined();
 		expect(res.objects).toHaveLength(5);
+	});
+
+	it('handles multiple r2 pages', async () => {
+		const totalObjects = R2_MAX_PAGE_SIZE * 2 + 2;
+		await addObjects('myBackupId==/m/edia', totalObjects, 'test');
+
+		// Can't return all objects because a third page would potentially bring us past our requested limit
+		let response = await SELF.fetch(
+			`http://localhost/backups/?prefix=${encodeURIComponent('myBackupId==/m/edia')}&limit=${totalObjects}`,
+			{ method: 'GET' });
+		expect(response.status).toBe(200);
+		let res = await response.json() as ListResponse;
+		expect(res.objects).toHaveLength(totalObjects - 2);
+		expect(res.cursor).toBeTruthy();
+
+		// List the remaining 2 objects
+		response = await SELF.fetch(
+			`http://localhost/backups/?prefix=${encodeURIComponent('myBackupId==/m/edia')}&limit=2&cursor=${res.cursor}`,
+			{ method: 'GET' });
+		expect(response.status).toBe(200);
+		res = await response.json() as ListResponse;
+		expect(res.objects).toHaveLength(2);
+		expect(res.cursor).toBeFalsy();
 	});
 });
 

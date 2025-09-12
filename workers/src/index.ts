@@ -4,6 +4,8 @@
 import { error, IRequest, json, Router, StatusError } from 'itty-router';
 import { Encrypter, streamEncrypt } from './encrypt';
 
+export const R2_MAX_PAGE_SIZE: number = 1000;
+
 export interface Env {
 	ATTACHMENT_BUCKET: R2Bucket;
 	BACKUP_BUCKET: R2Bucket;
@@ -63,23 +65,34 @@ async function listHandler(request: IRequest, env: Env): Promise<Response> {
 	if (Array.isArray(request.query['prefix'])) {
 		return error(400, 'only one prefix parameter can be provided');
 	}
-	const limit = request.query['limit'] == null ? undefined : parseInt(request.query['limit']);
-	if (limit != null && isNaN(limit)) {
-		throw new StatusError(400, 'limit must be a number');
+	const requestedLimit = request.query['limit'] == null ? undefined : parseInt(request.query['limit']);
+	if (requestedLimit != null && (isNaN(requestedLimit) || requestedLimit > 10000)) {
+		throw new StatusError(400, `invalid limit ${requestedLimit}`);
 	}
-	const response = await bucket.list({
-		prefix: request.query['prefix'],
-		cursor: request.query['cursor'],
-		limit
-	});
-	const objects = response.objects.map(({ key, size }) => ({
-		key: key,
-		size: size
-	}));
-	const listResponse: ListResponse = {
-		cursor: response.truncated ? response.cursor : undefined,
-		objects
-	};
+
+	const r2Limit = Math.min(R2_MAX_PAGE_SIZE, requestedLimit || R2_MAX_PAGE_SIZE);
+
+	const objects: Array<{ key: string; size: number }> = [];
+	let cursor: string | undefined = request.query['cursor'];
+	do {
+		const response = await bucket.list({
+			prefix: request.query['prefix'],
+			limit: r2Limit,
+			cursor
+		});
+		objects.push(...response.objects.map(({ key, size }) => ({
+			key: key,
+			size: size
+		})));
+
+		if (!response.truncated) {
+			cursor = undefined;
+			break;
+		}
+		cursor = response.cursor;
+	} while (requestedLimit && (objects.length + r2Limit <= requestedLimit));
+
+	const listResponse: ListResponse = { cursor, objects };
 	return json(listResponse);
 }
 
