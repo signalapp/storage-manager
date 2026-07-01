@@ -3,17 +3,17 @@
   "version": "0.4.8",
   "type": "module",
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.14.8",
+    "@cloudflare/vitest-pool-workers": "^0.17.0",
     "@types/node": "^25.6.0",
-    "@typescript-eslint/eslint-plugin": "^8.58.2",
+    "@typescript-eslint/eslint-plugin": "^8.62.1",
     "@typescript-eslint/parser": "^8.53.0",
-    "eslint": "^10.2.1",
+    "eslint": "^10.6.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.4",
+    "vitest": "^4.1.9",
     "wrangler": "^4.59.2"
   },
   "dependencies": {
-    "itty-router": "^5.0.23"
+    "itty-router": "^5.0.24"
   },
   "private": true,
   "scripts": {
