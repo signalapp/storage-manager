@@ -1,6 +1,6 @@
 {
   "name": "storage-manager",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "type": "module",
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.17.0",
