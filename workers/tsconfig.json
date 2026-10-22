@@ -8,7 +8,7 @@
 		"module": "es2022",
 		"moduleResolution": "Bundler",
 		"types": [
-			"@cloudflare/vitest-pool-workers"
+			"@cloudflare/vitest-plugin"
 		],
 		"resolveJsonModule": true,
 		"allowJs": true,
