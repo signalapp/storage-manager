@@ -4,11 +4,11 @@
 name = "storage-manager-dev"
 main = "src/index.ts"
 logpush = true
-compatibility_date = "2023-10-30"
+compatibility_date = "2026-10-19"
 workers_dev = false
 
 # required since we use node crypto's streaming HMAC
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = []
 
 # Specifies the r2 buckets. r2 bucket names are scoped to your account (not global). The buckets should be publicly inaccessible.
 r2_buckets = [
