@@ -1,6 +1,6 @@
 {
   "name": "storage-manager",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "type": "module",
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.0.0",
