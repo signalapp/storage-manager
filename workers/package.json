@@ -4,7 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^26.6.5",
     "@typescript-eslint/eslint-plugin": "^8.62.1",
     "@typescript-eslint/parser": "^8.53.0",
     "eslint": "^10.6.0",
