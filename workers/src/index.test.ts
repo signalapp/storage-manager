@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randBytes, randomishBytes, authenticateAndDecrypt, arrayEquals } from './testutil';
-import { ListResponse, R2_MAX_PAGE_SIZE } from './index';
+import { INFREQUENT_ACCESS_THRESHOLD_BYTES, ListResponse, R2_MAX_PAGE_SIZE } from './index';
 import {env, exports} from 'cloudflare:workers';
 import './env.d.ts';
 
@@ -325,6 +325,30 @@ describe('copy', () => {
 		const payload = await toArray(await env.BACKUP_BUCKET.get('my/abc'));
 		const decrypted = await authenticateAndDecrypt(encryptionKey, hmacKey, payload!);
 		expect(arrayEquals(decrypted, plaintext)).toBe(true);
+	});
+
+	it.each([
+		// 99,951 plaintext bytes encrypt to exactly INFREQUENT_ACCESS_THRESHOLD_BYTES, one more byte adds an AES block
+		[0, 'Standard'],
+		[8 * 1024, 'Standard'],
+		[99_951, 'Standard'],
+		[99_952, 'InfrequentAccess'],
+		[1024 * 1024, 'InfrequentAccess']
+	])('copies %s bytes to %s storage', async (plaintextLength: number, expectedStorageClass: string) => {
+		const plaintext = await randomishBytes(plaintextLength);
+		await env.ATTACHMENT_BUCKET.put('abc', plaintext);
+		const put = vi.spyOn(env.BACKUP_BUCKET, 'put');
+		const body = JSON.stringify(validRequest(plaintext));
+		const res = await worker.fetch('http://localhost/copy', {
+			method: 'PUT',
+			body: body
+		});
+		expect(res.status, await res.text()).toBe(204);
+		const copied = await env.BACKUP_BUCKET.head('my/abc');
+		expect(copied!.size > INFREQUENT_ACCESS_THRESHOLD_BYTES).toBe(expectedStorageClass === 'InfrequentAccess');
+		// The local R2 simulator doesn't record storage classes, so check what was requested instead
+		expect(put).toHaveBeenCalledOnce();
+		expect(put.mock.calls[0][2]?.storageClass).toBe(expectedStorageClass);
 	});
 
 	it.each([0, 63, 64, 1024 * 4 - 1, 1024, 1024 * 4 + 1])('copies %s bytes from GCS', async (plaintextLength: number) => {

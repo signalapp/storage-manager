@@ -7,6 +7,11 @@ import { Encrypter, streamEncrypt } from './encrypt';
 const MAX_REQUEST_PAGE_SIZE: number = 10000;
 export const R2_MAX_PAGE_SIZE: number = 1000;
 
+// Backup objects larger than this are written directly to Infrequent Access storage. Smaller objects (e.g. thumbnails)
+// stay in Standard storage, since the higher per-object cost of an Infrequent Access write outweighs what they'd save
+// in storage.
+export const INFREQUENT_ACCESS_THRESHOLD_BYTES: number = 100 * 1000;
+
 export interface Env {
 	ATTACHMENT_BUCKET: R2Bucket;
 	BACKUP_BUCKET: R2Bucket;
@@ -210,9 +215,11 @@ async function copyHandler(request: IRequest, env: Env): Promise<Response> {
 	}
 
 	const encrypter = await Encrypter.create(iv, hmacKey, aesKeyBuf);
-	const { readable, writable } = new FixedLengthStream(encrypter.encryptedLength(s.length));
+	const encryptedLength = encrypter.encryptedLength(s.length);
+	const { readable, writable } = new FixedLengthStream(encryptedLength);
 	const putRequest = env.BACKUP_BUCKET.put(copyRequest.dst, readable, {
-		httpMetadata: s.httpMetadata
+		httpMetadata: s.httpMetadata,
+		storageClass: encryptedLength > INFREQUENT_ACCESS_THRESHOLD_BYTES ? 'InfrequentAccess' : 'Standard'
 	});
 	await streamEncrypt(encrypter, s.body, writable);
 	await putRequest;
